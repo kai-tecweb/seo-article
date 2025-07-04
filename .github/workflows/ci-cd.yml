@@ -1,0 +1,221 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  # Laravel Backend テスト
+  backend-test:
+    runs-on: ubuntu-latest
+    
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: password
+          MYSQL_DATABASE: testing
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+      
+      redis:
+        image: redis:alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: '8.3'
+        extensions: mbstring, dom, fileinfo, mysql, redis
+        coverage: xdebug
+
+    - name: Copy .env
+      run: |
+        cd backend
+        cp .env.example .env
+        echo "DB_CONNECTION=mysql" >> .env
+        echo "DB_HOST=127.0.0.1" >> .env
+        echo "DB_PORT=3306" >> .env
+        echo "DB_DATABASE=testing" >> .env
+        echo "DB_USERNAME=root" >> .env
+        echo "DB_PASSWORD=password" >> .env
+        echo "REDIS_HOST=127.0.0.1" >> .env
+        echo "REDIS_PORT=6379" >> .env
+
+    - name: Install dependencies
+      run: |
+        cd backend
+        composer install --prefer-dist --no-progress
+
+    - name: Generate key
+      run: |
+        cd backend
+        php artisan key:generate
+
+    - name: Directory Permissions
+      run: |
+        cd backend
+        chmod -R 755 storage bootstrap/cache
+
+    - name: Run migrations
+      run: |
+        cd backend
+        php artisan migrate
+
+    - name: Run tests
+      run: |
+        cd backend
+        php artisan test --coverage-html coverage
+
+    - name: Upload coverage reports
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./backend/coverage.xml
+        flags: backend
+        name: backend-coverage
+
+  # Next.js Frontend テスト
+  frontend-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+
+    - name: Install dependencies
+      run: |
+        cd frontend
+        npm ci
+
+    - name: Run ESLint
+      run: |
+        cd frontend
+        npm run lint
+
+    - name: Run type check
+      run: |
+        cd frontend
+        npm run type-check
+
+    - name: Run tests
+      run: |
+        cd frontend
+        npm run test -- --coverage --watchAll=false
+
+    - name: Build application
+      run: |
+        cd frontend
+        npm run build
+
+    - name: Upload coverage reports
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./frontend/coverage/lcov.info
+        flags: frontend
+        name: frontend-coverage
+
+  # セキュリティ監査
+  security-audit:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: '8.3'
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+
+    - name: PHP Security Audit
+      run: |
+        cd backend
+        composer audit
+
+    - name: Node.js Security Audit
+      run: |
+        cd frontend
+        npm audit --audit-level=high
+
+  # Docker イメージビルド
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: [backend-test, frontend-test]
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Login to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+
+    - name: Build and push Backend
+      uses: docker/build-push-action@v5
+      with:
+        context: ./backend
+        push: true
+        tags: ${{ secrets.DOCKER_USERNAME }}/seo-article-backend:latest
+
+    - name: Build and push Frontend
+      uses: docker/build-push-action@v5
+      with:
+        context: ./frontend
+        push: true
+        tags: ${{ secrets.DOCKER_USERNAME }}/seo-article-frontend:latest
+
+  # 本番デプロイ
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [docker-build]
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Deploy to production
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: ${{ secrets.HOST }}
+        username: ${{ secrets.USERNAME }}
+        key: ${{ secrets.SSH_KEY }}
+        script: |
+          cd /var/www/seo-article
+          docker-compose pull
+          docker-compose down
+          docker-compose up -d
+          docker-compose exec -T app php artisan migrate --force
+          docker-compose exec -T app php artisan config:cache
+          docker-compose exec -T app php artisan route:cache
+          docker-compose exec -T app php artisan view:cache
