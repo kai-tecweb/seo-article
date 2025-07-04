@@ -153,6 +153,36 @@ npm run test:coverage
 4. **SSL証明書**: Let's Encrypt等で設定
 5. **CI/CD**: GitHub Actions等で自動デプロイ
 
+### GitHub Actions の設定
+
+以下のシークレットをGitHubリポジトリに設定してください：
+
+#### 必須シークレット
+```bash
+# アプリケーション設定
+APP_KEY=base64:ランダムなキー    # php artisan key:generate で生成
+
+# データベース設定
+DB_PASSWORD=本番用パスワード
+REDIS_PASSWORD=本番用パスワード
+
+# 本番環境デプロイ用
+DEPLOY_HOST=デプロイ先サーバーのホスト
+DEPLOY_USER=デプロイ用ユーザー
+DEPLOY_KEY=SSH秘密鍵
+```
+
+#### シークレット設定コマンド
+```bash
+# GitHub CLI を使用してシークレットを設定
+gh secret set APP_KEY
+gh secret set DB_PASSWORD
+gh secret set REDIS_PASSWORD
+gh secret set DEPLOY_HOST
+gh secret set DEPLOY_USER
+gh secret set DEPLOY_KEY
+```
+
 ## 🛡️ セキュリティ
 
 ### 実装済み対策
