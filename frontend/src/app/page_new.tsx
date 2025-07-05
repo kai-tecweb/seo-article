@@ -18,12 +18,16 @@ export default function SEOArticleGenerator() {
 
   return (
     <div className="flex min-h-screen bg-gray-50">
+      {/* ヘッダー */}
+      <div className="fixed top-0 left-0 right-0 z-50 bg-white shadow-sm border-b border-gray-200">
+        <div className="px-6 py-4">
+          <h1 className="text-2xl font-bold text-gray-900">SEO記事自動生成ツール</h1>
+        </div>
+      </div>
+
       {/* サイドバー（縦タブ） */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex w-full">
-        <TabsList className="flex flex-col w-64 min-h-screen bg-white border-r border-gray-200 p-4 gap-2">
-          <div className="mb-4 pb-4 border-b border-gray-200">
-            <h1 className="text-lg font-bold text-gray-900">SEO記事自動生成ツール</h1>
-          </div>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex pt-20 w-full">
+        <TabsList className="flex flex-col w-64 p-4 bg-white shadow-sm border-r border-gray-200 gap-1 fixed left-0 top-20 bottom-0 overflow-y-auto">
           <TabsTrigger
             value="keyword-settings"
             className="w-full justify-start px-4 py-3 text-sm font-medium rounded-lg bg-gray-50 hover:bg-blue-50 data-[state=active]:bg-blue-100 data-[state=active]:text-blue-900 data-[state=active]:border-l-4 data-[state=active]:border-blue-600 transition-all duration-200"
@@ -135,7 +139,7 @@ export default function SEOArticleGenerator() {
         </TabsList>
 
         {/* コンテンツエリア */}
-        <div className="flex-1 p-6 overflow-y-auto">
+        <div className="flex-1 ml-64 p-6 overflow-y-auto">
           {/* キーワード設定タブ */}
           <TabsContent value="keyword-settings">
             <Card className="shadow-sm bg-white border border-gray-200">
